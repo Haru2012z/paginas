@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Print Layout Organizer</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Font Awesome -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <!-- Fabric.js for canvas manipulation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+
+    <!-- FileSaver.js for downloading files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style id="app-style">
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .canvas-container {
+        position: relative;
+        overflow: auto;
+        height: calc(100vh - 60px);
+      }
+
+      #canvas-wrapper {
+        position: relative;
+        margin: 30px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        background-color: white;
+      }
+
+      .ruler-h {
+        position: absolute;
+        top: 0;
+        left: 30px;
+        height: 30px;
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ddd;
+        overflow: hidden;
+      }
+
+      .ruler-v {
+        position: absolute;
+        top: 30px;
+        left: 0;
+        width: 30px;
+        background-color: #f0f0f0;
+        border-right: 1px solid #ddd;
+        overflow: hidden;
+      }
+
+      .ruler-corner {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 30px;
+        height: 30px;
+        background-color: #e0e0e0;
+        border-right: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+      }
+
+      .ruler-marker {
+        position: absolute;
+        background-color: #333;
+      }
+
+      .ruler-text {
+        position: absolute;
+        font-size: 9px;
+        color: #333;
+      }
+
+      .layers-panel {
+        width: 250px;
+        height: calc(100vh - 60px);
+        border-left: 1px solid #ddd;
+        overflow-y: auto;
+      }
+
+      .layer-item {
+        border-bottom: 1px solid #eee;
+      }
+
+      .layer-item:hover {
+        background-color: #f9f9f9;
+      }
+
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        visibility: hidden;
+      }
+
+      .spinner {
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #3498db;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100">
+    <!-- Header Toolbar -->
+    <div class="bg-white border-b shadow-sm p-2">
+      <div
+        class="container mx-auto flex flex-wrap items-center justify-between"
+      >
+        <div class="text-xl font-bold text-gray-800">
+          Print Layout Organizer
+        </div>
+        <div class="flex space-x-2">
+          <button
+            id="import-btn"
+            class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded flex items-center"
+          >
+            <i class="fas fa-file-import mr-2"></i>Import PNG
+          </button>
+          <input
+            type="file"
+            id="file-input"
+            accept="image/png"
+            class="hidden"
+            multiple
+          />
+
+          <button
+            id="save-btn"
+            class="bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded flex items-center"
+          >
+            <i class="fas fa-save mr-2"></i>Save Project
+          </button>
+
+          <button
+            id="load-btn"
+            class="bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-3 rounded flex items-center"
+          >
+            <i class="fas fa-folder-open mr-2"></i>Load Project
+          </button>
+
+          <button
+            id="export-png-btn"
+            class="bg-purple-600 hover:bg-purple-700 text-white py-2 px-3 rounded flex items-center"
+          >
+            <i class="fas fa-file-export mr-2"></i>Export PNG
+          </button>
+
+          <button
+            id="export-pdf-btn"
+            class="bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded flex items-center"
+          >
+            <i class="fas fa-file-pdf mr-2"></i>Export PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex">
+      <!-- Canvas Area -->
+      <div class="flex-grow canvas-container">
+        <div class="ruler-corner"></div>
+        <div id="ruler-h" class="ruler-h"></div>
+        <div id="ruler-v" class="ruler-v"></div>
+        <div id="canvas-wrapper">
+          <canvas id="canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Layers Panel -->
+      <div class="layers-panel bg-white">
+        <div class="p-3 bg-gray-100 border-b">
+          <h2 class="text-lg font-semibold">Layers</h2>
+        </div>
+        <div id="layers-list" class="divide-y divide-gray-200">
+          <!-- Layers will be added here dynamically -->
+          <div class="p-4 text-center text-gray-500">
+            Import images to add layers
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="text-center">
+        <div class="spinner mx-auto mb-3"></div>
+        <p id="loading-text" class="text-lg text-gray-700">Processing...</p>
+      </div>
+    </div>
+
+    <script id="app-script">
+      // Initialize variables for canvas and configuration
+      const CANVAS_WIDTH_CM = 28;
+      const CANVAS_HEIGHT_CM = 100;
+      const PIXELS_PER_CM = 20; // Scale factor for display
+      const CANVAS_WIDTH_PX = CANVAS_WIDTH_CM * PIXELS_PER_CM;
+      const CANVAS_HEIGHT_PX = CANVAS_HEIGHT_CM * PIXELS_PER_CM;
+      const DPI = 300; // For high-resolution exports
+
+      let canvas;
+      let layers = [];
+      let layerCounter = 0;
+
+      // Initialize the canvas with Fabric.js
+      function initializeCanvas() {
+        canvas = new fabric.Canvas("canvas", {
+          width: CANVAS_WIDTH_PX,
+          height: CANVAS_HEIGHT_PX,
+          backgroundColor: "white",
+          selection: true,
+          preserveObjectStacking: true,
+        });
+
+        // Set canvas wrapper dimensions
+        document.getElementById(
+          "canvas-wrapper"
+        ).style.width = `${CANVAS_WIDTH_PX}px`;
+        document.getElementById(
+          "canvas-wrapper"
+        ).style.height = `${CANVAS_HEIGHT_PX}px`;
+
+        // Initialize rulers
+        initializeRulers();
+
+        // Setup event listeners for canvas
+        setupCanvasEvents();
+      }
+
+      // Create horizontal and vertical rulers
+      function initializeRulers() {
+        const rulerH = document.getElementById("ruler-h");
+        const rulerV = document.getElementById("ruler-v");
+
+        rulerH.style.width = `${CANVAS_WIDTH_PX}px`;
+        rulerV.style.height = `${CANVAS_HEIGHT_PX}px`;
+
+        // Create horizontal ruler markers
+        for (let i = 0; i <= CANVAS_WIDTH_CM; i++) {
+          const position = i * PIXELS_PER_CM;
+
+          // Create marker
+          const marker = document.createElement("div");
+          marker.className = "ruler-marker";
+          marker.style.left = `${position}px`;
+          marker.style.top = "24px";
+          marker.style.width = "1px";
+          marker.style.height = "6px";
+          rulerH.appendChild(marker);
+
+          // Add number every 5cm
+          if (i % 5 === 0) {
+            const text = document.createElement("div");
+            text.className = "ruler-text";
+            text.textContent = `${i}`;
+            text.style.left = `${position - 4}px`;
+            text.style.top = "5px";
+            rulerH.appendChild(text);
+
+            // Make the marker larger
+            marker.style.height = "12px";
+            marker.style.top = "18px";
+          }
+        }
+
+        // Create vertical ruler markers
+        for (let i = 0; i <= CANVAS_HEIGHT_CM; i++) {
+          const position = i * PIXELS_PER_CM;
+
+          // Create marker
+          const marker = document.createElement("div");
+          marker.className = "ruler-marker";
+          marker.style.top = `${position}px`;
+          marker.style.left = "24px";
+          marker.style.height = "1px";
+          marker.style.width = "6px";
+          rulerV.appendChild(marker);
+
+          // Add number every 10cm
+          if (i % 10 === 0) {
+            const text = document.createElement("div");
+            text.className = "ruler-text";
+            text.textContent = `${i}`;
+            text.style.top = `${position - 4}px`;
+            text.style.left = "5px";
+            rulerV.appendChild(text);
+
+            // Make the marker larger
+            marker.style.width = "12px";
+            marker.style.left = "18px";
+          }
+        }
+      }
+
+      // Set up canvas event listeners
+      function setupCanvasEvents() {
+        canvas.on("selection:created", updateObjectControls);
+        canvas.on("selection:updated", updateObjectControls);
+        canvas.on("selection:cleared", clearObjectControls);
+
+        canvas.on("object:modified", function (e) {
+          updateLayerPreview(e.target);
+        });
+
+        canvas.on("object:moving", function (e) {
+          // Update delete button position when object is moved
+          updateDeleteButtonPosition(e.target);
+        });
+
+        // Add new event handlers for scaling and rotating
+        canvas.on("object:scaling", function (e) {
+          updateDeleteButtonPosition(e.target);
+        });
+
+        canvas.on("object:rotating", function (e) {
+          updateDeleteButtonPosition(e.target);
+        });
+      }
+
+      // Function to add delete button overlay to a fabric object
+      function addDeleteButton(fabricObj) {
+        const deleteBtn = new fabric.Circle({
+          radius: 10,
+          fill: "#e53e3e",
+          top: fabricObj.top - 10,
+          left: fabricObj.left + fabricObj.getScaledWidth() - 10,
+          stroke: "#fff",
+          strokeWidth: 2,
+          originX: "center",
+          originY: "center",
+          objectCaching: false,
+          name: "deleteButton",
+          objectId: fabricObj.id,
+          selectable: false,
+          evented: true,
+          visible: false,
+        });
+
+        // Add trash icon as text
+        const trashIcon = new fabric.Text("\uf2ed", {
+          fontFamily: "FontAwesome",
+          fontSize: 10,
+          fill: "#fff",
+          top: deleteBtn.top,
+          left: deleteBtn.left,
+          originX: "center",
+          originY: "center",
+          selectable: false,
+          evented: false,
+          visible: false,
+          name: "deleteIcon",
+          objectId: fabricObj.id,
+        });
+
+        // Add event listener for the delete button
+        deleteBtn.on("mousedown", function () {
+          // Find the object to delete
+          const objectToDelete = canvas
+            .getObjects()
+            .find((obj) => obj.id === this.objectId);
+          if (objectToDelete) {
+            // Remove the object and its delete button from canvas
+            removeObject(objectToDelete);
+          }
+        });
+
+        // Store the delete button and icon references in the fabricObj
+        fabricObj.deleteButton = deleteBtn;
+        fabricObj.deleteIcon = trashIcon;
+
+        // Add button and icon to canvas
+        canvas.add(deleteBtn);
+        canvas.add(trashIcon);
+
+        // Update button position based on object
+        updateDeleteButtonPosition(fabricObj);
+
+        // Add hover event to show delete button
+        fabricObj.on("mouseover", function () {
+          if (fabricObj.deleteButton) {
+            fabricObj.deleteButton.set("visible", true);
+            fabricObj.deleteIcon.set("visible", true);
+            canvas.renderAll();
+          }
+        });
+
+        fabricObj.on("mouseout", function (e) {
+          // Hide delete button unless object is selected
+          if (
+            fabricObj.deleteButton &&
+            canvas.getActiveObject() !== fabricObj
+          ) {
+            fabricObj.deleteButton.set("visible", false);
+            fabricObj.deleteIcon.set("visible", false);
+            canvas.renderAll();
+          }
+        });
+      }
+
+      // Update delete button position based on object position and transformation
+      function updateDeleteButtonPosition(obj) {
+        if (!obj || !obj.deleteButton || !obj.deleteIcon) return;
+
+        // Calculate the position in object coordinates
+        const angle = obj.angle || 0;
+        const radians = (angle * Math.PI) / 180;
+        const objWidth = obj.getScaledWidth();
+        const objHeight = obj.getScaledHeight();
+
+        // Calculate the top-right corner position
+        const offsetX =
+          (objWidth / 2) * Math.cos(radians) -
+          (objHeight / 2) * Math.sin(radians);
+        const offsetY =
+          (objWidth / 2) * Math.sin(radians) +
+          (objHeight / 2) * Math.cos(radians);
+
+        // Position the delete button
+        obj.deleteButton.set({
+          top: obj.top - offsetY,
+          left: obj.left + offsetX,
+          visible: obj === canvas.getActiveObject(),
+        });
+
+        // Position the icon
+        obj.deleteIcon.set({
+          top: obj.deleteButton.top,
+          left: obj.deleteButton.left,
+          angle: 0, // Keep icon upright
+          visible: obj === canvas.getActiveObject(),
+        });
+
+        // Move delete button to top
+        canvas.bringToFront(obj.deleteButton);
+        canvas.bringToFront(obj.deleteIcon);
+      }
+
+      // Function to remove an object and its associated elements
+      function removeObject(obj) {
+        // Remove the object's delete button and icon
+        if (obj.deleteButton) canvas.remove(obj.deleteButton);
+        if (obj.deleteIcon) canvas.remove(obj.deleteIcon);
+
+        // Remove the object from canvas
+        canvas.remove(obj);
+
+        // Remove from layers panel
+        const layerItem = document.querySelector(
+          `.layer-item[data-id="${obj.id}"]`
+        );
+        if (layerItem) {
+          const layersContainer = document.getElementById("layers-list");
+          layersContainer.removeChild(layerItem);
+          if (layersContainer.children.length === 0) {
+            const placeholder = document.createElement("div");
+            placeholder.className = "p-4 text-center text-gray-500";
+            placeholder.textContent = "Import images to add layers";
+            layersContainer.appendChild(placeholder);
+          }
+        }
+
+        // Rearrange layers
+        rearrangeLayers();
+
+        // Update canvas
+        canvas.renderAll();
+      }
+
+      // Update the existing addLayer function
+      function addLayer(fabricObj, index) {
+        const layersContainer = document.getElementById("layers-list");
+
+        // Remove placeholder if it exists
+        const placeholder = layersContainer.querySelector(
+          "div:not(.layer-item)"
+        );
+        if (placeholder) {
+          layersContainer.removeChild(placeholder);
+        }
+
+        // Create layer item
+        const layerItem = document.createElement("div");
+        layerItem.className =
+          "layer-item p-3 flex justify-between items-center";
+        layerItem.setAttribute("data-id", fabricObj.id);
+
+        // Create thumbnail container
+        const thumbnailContainer = document.createElement("div");
+        thumbnailContainer.className =
+          "w-12 h-12 bg-gray-200 flex items-center justify-center overflow-hidden";
+
+        // Create thumbnail image
+        const thumbnailImg = document.createElement("img");
+        thumbnailImg.src = fabricObj.toDataURL({
+          format: "png",
+          multiplier: 0.1,
+        });
+        thumbnailImg.className = "max-w-full max-h-full";
+        thumbnailContainer.appendChild(thumbnailImg);
+
+        // Create layer content (name, etc)
+        const layerContent = document.createElement("div");
+        layerContent.className = "ml-2 flex-grow";
+
+        const layerName = document.createElement("div");
+        layerName.className = "text-sm font-medium truncate";
+        layerName.textContent = fabricObj.name || `Layer ${index}`;
+        layerContent.appendChild(layerName);
+
+        const layerSize = document.createElement("div");
+        layerSize.className = "text-xs text-gray-500";
+        const widthCm = (
+          (fabricObj.width * fabricObj.scaleX) /
+          PIXELS_PER_CM
+        ).toFixed(1);
+        const heightCm = (
+          (fabricObj.height * fabricObj.scaleY) /
+          PIXELS_PER_CM
+        ).toFixed(1);
+        layerSize.textContent = `${widthCm}cm x ${heightCm}cm`;
+        layerContent.appendChild(layerSize);
+
+        // Create controls container
+        const layerControls = document.createElement("div");
+        layerControls.className = "flex space-x-1";
+
+        // Visibility toggle
+        const visibilityBtn = document.createElement("button");
+        visibilityBtn.className = "p-1 text-gray-600 hover:text-gray-900";
+        visibilityBtn.innerHTML = '<i class="fas fa-eye"></i>';
+        visibilityBtn.onclick = function () {
+          const visible = fabricObj.visible;
+          fabricObj.set("visible", !visible);
+          visibilityBtn.innerHTML = !visible
+            ? '<i class="fas fa-eye"></i>'
+            : '<i class="fas fa-eye-slash"></i>';
+          canvas.renderAll();
+        };
+        layerControls.appendChild(visibilityBtn);
+
+        // Move up button
+        const upBtn = document.createElement("button");
+        upBtn.className = "p-1 text-gray-600 hover:text-gray-900";
+        upBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+        upBtn.onclick = function () {
+          fabricObj.bringForward();
+          rearrangeLayers();
+          canvas.renderAll();
+        };
+        layerControls.appendChild(upBtn);
+
+        // Move down button
+        const downBtn = document.createElement("button");
+        downBtn.className = "p-1 text-gray-600 hover:text-gray-900";
+        downBtn.innerHTML = '<i class="fas fa-arrow-down"></i>';
+        downBtn.onclick = function () {
+          fabricObj.sendBackwards();
+          rearrangeLayers();
+          canvas.renderAll();
+        };
+        layerControls.appendChild(downBtn);
+
+        // Delete button
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "p-1 text-red-600 hover:text-red-800";
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.onclick = function () {
+          removeObject(fabricObj); // Use the new removeObject function
+        };
+        layerControls.appendChild(deleteBtn);
+
+        // Add all elements to the layer item
+        layerItem.appendChild(thumbnailContainer);
+        layerItem.appendChild(layerContent);
+        layerItem.appendChild(layerControls);
+
+        // Make layer item clickable to select the object
+        layerItem.onclick = function (e) {
+          if (!e.target.closest("button")) {
+            canvas.discardActiveObject();
+            canvas.setActiveObject(fabricObj);
+            canvas.renderAll();
+          }
+        };
+
+        // Add layer item to the layers panel
+        layersContainer.prepend(layerItem);
+
+        // Store layer in our layers array
+        layers.push({
+          id: fabricObj.id,
+          object: fabricObj,
+          element: layerItem,
+        });
+
+        // Add delete button overlay to the fabric object
+        addDeleteButton(fabricObj);
+      }
+
+      // Update the existing updateLayerPreview function
+      function updateLayerPreview(fabricObj) {
+        const layerItem = document.querySelector(
+          `.layer-item[data-id="${fabricObj.id}"]`
+        );
+        if (!layerItem) return;
+
+        const thumbnail = layerItem.querySelector("img");
+        thumbnail.src = fabricObj.toDataURL({
+          format: "png",
+          multiplier: 0.1,
+        });
+
+        // Update size display
+        const layerSize = layerItem.querySelector(".text-gray-500");
+        const widthCm = (
+          (fabricObj.width * fabricObj.scaleX) /
+          PIXELS_PER_CM
+        ).toFixed(1);
+        const heightCm = (
+          (fabricObj.height * fabricObj.scaleY) /
+          PIXELS_PER_CM
+        ).toFixed(1);
+        layerSize.textContent = `${widthCm}cm x ${heightCm}cm`;
+      }
+
+      // Rearrange layers in the panel to match canvas order
+      function rearrangeLayers() {
+        const layersContainer = document.getElementById("layers-list");
+
+        // Get objects in their stacking order
+        const objects = canvas.getObjects();
+
+        // Clear the container
+        layersContainer.innerHTML = "";
+
+        // Add layers in reverse order (top to bottom)
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const obj = objects[i];
+          const layer = layers.find((l) => l.id === obj.id);
+          if (layer) {
+            layersContainer.appendChild(layer.element);
+          }
+        }
+      }
+
+      // Save project to LocalStorage
+      function saveProject() {
+        showLoading("Saving project...");
+
+        // Create a data structure to hold the project
+        const projectData = {
+          canvasWidth: CANVAS_WIDTH_CM,
+          canvasHeight: CANVAS_HEIGHT_CM,
+          objects: [],
+        };
+
+        // Get all objects from the canvas
+        const objects = canvas.getObjects();
+
+        // Create promises for each object
+        const promises = objects.map((obj) => {
+          return new Promise((resolve) => {
+            const objectData = {
+              id: obj.id,
+              name: obj.name,
+              left: obj.left,
+              top: obj.top,
+              width: obj.width,
+              height: obj.height,
+              scaleX: obj.scaleX,
+              scaleY: obj.scaleY,
+              angle: obj.angle,
+              visible: obj.visible,
+              imageData: obj.toDataURL({ format: "png" }),
+            };
+            resolve(objectData);
+          });
+        });
+
+        // When all promises resolve, save the data
+        Promise.all(promises).then((objectsData) => {
+          projectData.objects = objectsData;
+
+          // Save to LocalStorage
+          localStorage.setItem(
+            "printLayoutProject",
+            JSON.stringify(projectData)
+          );
+
+          // Show success message
+          hideLoading();
+          alert("Project saved successfully");
+        });
+      }
+
+      // Load project from LocalStorage
+      function loadProject() {
+        showLoading("Loading project...");
+
+        // Get data from LocalStorage
+        const projectDataString = localStorage.getItem("printLayoutProject");
+
+        if (!projectDataString) {
+          hideLoading();
+          alert("No saved project found");
+          return;
+        }
+
+        try {
+          const projectData = JSON.parse(projectDataString);
+
+          // Clear canvas and layers
+          canvas.clear();
+          document.getElementById("layers-list").innerHTML = "";
+          layers = [];
+          layerCounter = 0;
+
+          // Load objects from project data
+          const loadPromises = projectData.objects.map((objData) => {
+            return new Promise((resolve) => {
+              fabric.Image.fromURL(objData.imageData, (img) => {
+                img.set({
+                  id: objData.id,
+                  name: objData.name,
+                  left: objData.left,
+                  top: objData.top,
+                  scaleX: objData.scaleX,
+                  scaleY: objData.scaleY,
+                  angle: objData.angle,
+                  visible: objData.visible,
+                });
+
+                canvas.add(img);
+                addLayer(img, layerCounter++);
+                resolve();
+              });
+            });
+          });
+
+          // When all objects are loaded
+          Promise.all(loadPromises).then(() => {
+            canvas.renderAll();
+            rearrangeLayers();
+            hideLoading();
+          });
+        } catch (error) {
+          console.error("Error loading project:", error);
+          hideLoading();
+          alert("Error loading project");
+        }
+      }
+
+      // Export canvas as PNG
+      function exportAsPNG() {
+        showLoading("Generating PNG...");
+
+        // Create a temporary canvas for high-resolution export
+        const tempCanvas = document.createElement("canvas");
+        const tempContext = tempCanvas.getContext("2d");
+
+        // Set the canvas size based on DPI
+        const scaleFactor = DPI / 96; // Convert from screen DPI to target DPI
+        tempCanvas.width = CANVAS_WIDTH_PX * scaleFactor;
+        tempCanvas.height = CANVAS_HEIGHT_PX * scaleFactor;
+
+        // Set background
+        tempContext.fillStyle = "white";
+        tempContext.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Get objects in their stacking order
+        const objects = canvas.getObjects();
+
+        // Create promises for each object
+        const promises = objects.map((obj) => {
+          return new Promise((resolve) => {
+            if (!obj.visible) {
+              resolve();
+              return;
+            }
+
+            const img = new Image();
+            img.onload = function () {
+              const leftScaled = obj.left * scaleFactor;
+              const topScaled = obj.top * scaleFactor;
+              const widthScaled = obj.width * obj.scaleX * scaleFactor;
+              const heightScaled = obj.height * obj.scaleY * scaleFactor;
+
+              tempContext.save();
+              tempContext.translate(
+                leftScaled + widthScaled / 2,
+                topScaled + heightScaled / 2
+              );
+              tempContext.rotate((obj.angle * Math.PI) / 180);
+              tempContext.drawImage(
+                img,
+                -widthScaled / 2,
+                -heightScaled / 2,
+                widthScaled,
+                heightScaled
+              );
+              tempContext.restore();
+
+              resolve();
+            };
+            img.src = obj.toDataURL({ format: "png" });
+          });
+        });
+
+        // When all objects are drawn
+        Promise.all(promises).then(() => {
+          // Convert to PNG data URL
+          const pngDataUrl = tempCanvas.toDataURL("image/png");
+
+          // Create a download link
+          const downloadLink = document.createElement("a");
+          downloadLink.href = pngDataUrl;
+          downloadLink.download = "print-layout.png";
+
+          // Trigger download
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+
+          hideLoading();
+        });
+      }
+
+      // Export canvas as PDF
+      function exportAsPDF() {
+        showLoading("Generating PDF...");
+
+        // Create a temporary canvas for high-resolution export
+        const tempCanvas = document.createElement("canvas");
+        const tempContext = tempCanvas.getContext("2d");
+
+        // Set the canvas size based on DPI
+        const scaleFactor = DPI / 96; // Convert from screen DPI to target DPI
+        tempCanvas.width = CANVAS_WIDTH_PX * scaleFactor;
+        tempCanvas.height = CANVAS_HEIGHT_PX * scaleFactor;
+
+        // Set background
+        tempContext.fillStyle = "white";
+        tempContext.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Get objects in their stacking order
+        const objects = canvas.getObjects();
+
+        // Create promises for each object
+        const promises = objects.map((obj) => {
+          return new Promise((resolve) => {
+            if (!obj.visible) {
+              resolve();
+              return;
+            }
+
+            const img = new Image();
+            img.onload = function () {
+              const leftScaled = obj.left * scaleFactor;
+              const topScaled = obj.top * scaleFactor;
+              const widthScaled = obj.width * obj.scaleX * scaleFactor;
+              const heightScaled = obj.height * obj.scaleY * scaleFactor;
+
+              tempContext.save();
+              tempContext.translate(
+                leftScaled + widthScaled / 2,
+                topScaled + heightScaled / 2
+              );
+              tempContext.rotate((obj.angle * Math.PI) / 180);
+              tempContext.drawImage(
+                img,
+                -widthScaled / 2,
+                -heightScaled / 2,
+                widthScaled,
+                heightScaled
+              );
+              tempContext.restore();
+
+              resolve();
+            };
+            img.src = obj.toDataURL({ format: "png" });
+          });
+        });
+
+        // When all objects are drawn
+        Promise.all(promises).then(() => {
+          // Convert to PNG data URL for PDF
+          const pngDataUrl = tempCanvas.toDataURL("image/png");
+
+          // Create PDF using jsPDF
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "cm",
+            format: [CANVAS_WIDTH_CM, CANVAS_HEIGHT_CM],
+          });
+
+          // Add the image to the PDF
+          pdf.addImage(
+            pngDataUrl,
+            "PNG",
+            0,
+            0,
+            CANVAS_WIDTH_CM,
+            CANVAS_HEIGHT_CM
+          );
+
+          // Save the PDF
+          pdf.save("print-layout.pdf");
+
+          hideLoading();
+        });
+      }
+
+      // Show loading indicator
+      function showLoading(message) {
+        const overlay = document.getElementById("loading-overlay");
+        const loadingText = document.getElementById("loading-text");
+        loadingText.textContent = message || "Processing...";
+        overlay.style.visibility = "visible";
+      }
+
+      // Hide loading indicator
+      function hideLoading() {
+        const overlay = document.getElementById("loading-overlay");
+        overlay.style.visibility = "hidden";
+      }
+
+      // Update importImages to ensure delete buttons are added
+      function importImages(files) {
+        showLoading("Importing images...");
+
+        Array.from(files).forEach((file) => {
+          if (!file.type.match("image/png")) {
+            console.warn("Only PNG files are supported");
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            const imgElement = new Image();
+            imgElement.src = e.target.result;
+
+            imgElement.onload = function () {
+              // Create a fabric image
+              fabric.Image.fromURL(e.target.result, function (fabricImg) {
+                // Resize image if it's too large for the canvas
+                const maxWidth = CANVAS_WIDTH_PX * 0.9;
+                const maxHeight = CANVAS_HEIGHT_PX * 0.9;
+
+                if (
+                  fabricImg.width > maxWidth ||
+                  fabricImg.height > maxHeight
+                ) {
+                  const scale = Math.min(
+                    maxWidth / fabricImg.width,
+                    maxHeight / fabricImg.height
+                  );
+                  fabricImg.scale(scale);
+                }
+
+                // Center the image initially
+                fabricImg.set({
+                  left:
+                    CANVAS_WIDTH_PX / 2 -
+                    (fabricImg.width * fabricImg.scaleX) / 2,
+                  top:
+                    CANVAS_HEIGHT_PX / 2 -
+                    (fabricImg.height * fabricImg.scaleY) / 2,
+                  id: `image-${layerCounter}`,
+                  name: file.name.substring(0, 20),
+                });
+
+                // Add to canvas
+                canvas.add(fabricImg);
+
+                // Add to layers
+                addLayer(fabricImg, layerCounter);
+                layerCounter++;
+
+                // Update the canvas
+                canvas.renderAll();
+                hideLoading();
+              });
+            };
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // Update the existing updateObjectControls function
+      function updateObjectControls(e) {
+        const activeObject = e.selected[0];
+        if (activeObject) {
+          highlightActiveLayer(activeObject.id);
+
+          // Show delete button for active object
+          if (activeObject.deleteButton) {
+            activeObject.deleteButton.set("visible", true);
+            activeObject.deleteIcon.set("visible", true);
+            updateDeleteButtonPosition(activeObject);
+            canvas.renderAll();
+          }
+        }
+      }
+
+      // Clear UI when selection is cleared
+      function clearObjectControls() {
+        // Hide all delete buttons
+        canvas.getObjects().forEach((obj) => {
+          if (obj.deleteButton) {
+            obj.deleteButton.set("visible", false);
+            obj.deleteIcon.set("visible", false);
+          }
+        });
+        canvas.renderAll();
+
+        // Remove highlight from all layers
+        document.querySelectorAll(".layer-item").forEach((item) => {
+          item.classList.remove("bg-blue-100");
+        });
+      }
+
+      // Highlight the active layer in the layers panel
+      function highlightActiveLayer(objectId) {
+        document.querySelectorAll(".layer-item").forEach((item) => {
+          if (item.getAttribute("data-id") === objectId.toString()) {
+            item.classList.add("bg-blue-100");
+          } else {
+            item.classList.remove("bg-blue-100");
+          }
+        });
+      }
+
+      // Initialize everything when the page loads
+      window.addEventListener("DOMContentLoaded", () => {
+        // Initialize canvas
+        initializeCanvas();
+
+        // Set up event listeners for buttons
+        document.getElementById("import-btn").addEventListener("click", () => {
+          document.getElementById("file-input").click();
+        });
+
+        document
+          .getElementById("file-input")
+          .addEventListener("change", (e) => {
+            importImages(e.target.files);
+            e.target.value = null; // Reset the file input
+          });
+
+        document
+          .getElementById("save-btn")
+          .addEventListener("click", saveProject);
+        document
+          .getElementById("load-btn")
+          .addEventListener("click", loadProject);
+        document
+          .getElementById("export-png-btn")
+          .addEventListener("click", exportAsPNG);
+        document
+          .getElementById("export-pdf-btn")
+          .addEventListener("click", exportAsPDF);
+
+        // Support drag and drop for the canvas area
+        const canvasContainer = document.querySelector(".canvas-container");
+
+        canvasContainer.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          canvasContainer.classList.add("bg-blue-50");
+        });
+
+        canvasContainer.addEventListener("dragleave", () => {
+          canvasContainer.classList.remove("bg-blue-50");
+        });
+
+        canvasContainer.addEventListener("drop", (e) => {
+          e.preventDefault();
+          canvasContainer.classList.remove("bg-blue-50");
+          if (e.dataTransfer.files.length > 0) {
+            importImages(e.dataTransfer.files);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
